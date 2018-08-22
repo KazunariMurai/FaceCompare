@@ -1,0 +1,66 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Aug  2 12:35:49 2018
+
+@author: User
+"""
+
+import boto3
+import os
+import time
+from boto3 import Session
+
+BUCKET = "smart119-face-recognition" 
+source = "D:/data/Face data/lfw-a/lfw/Aaron_Eckhart/Aaron_Eckhart_0005.jpg" # local file
+
+start = time.time()
+
+# compare
+def compare_faces(key, bucket_target, key_target, threshold=70, region="us-east-2"):
+	rekognition = boto3.client("rekognition", region)
+	response = rekognition.compare_faces(
+       SourceImage={	'Bytes' : key.read()	}, # local image data
+		TargetImage={ # data in the bucket
+			"S3Object": {
+				"Bucket": bucket_target,
+				"Name": key_target,
+			}
+		},
+	    SimilarityThreshold=threshold,
+	)
+	return response['SourceImageFace'], response['FaceMatches']
+
+# get all files
+s3res = Session().resource('s3')
+
+bucket = s3res.Bucket('smart119-face-recognition')
+keys = [obj.key for obj in bucket.objects.all()]
+
+sim = 0
+cnt = 0
+p = ''
+
+for file in keys:
+    base, ext = os.path.splitext(file)
+    if (ext == '.jpg') or (ext == '.jpeg') or (ext == '.JPG') or (ext == '.JPEG') or (ext == '.png') or (ext == '.bmp'):
+        cnt += 1
+        KEY_S = open(source, 'rb')
+        KEY_T = file
+        print(KEY_T)
+        source_face, matches = compare_faces(KEY_S, BUCKET, KEY_T)
+
+        # one match for each target face
+        for match in matches:
+            #print ("Target Face ({Confidence}%)".format(**match['Face']))
+            print ("  Similarity : {}%".format(match['Similarity']))
+            if sim < match['Similarity']:
+                sim = match['Similarity']
+                p = file
+        
+        KEY_S.close()
+
+print("\nData with the highest similarity : ")
+print("    {} : {}%".format(p, sim))
+
+elapsed_time = time.time() - start
+print ("{0} images : {1}".format(cnt, elapsed_time) + "[sec]")
